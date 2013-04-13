@@ -1,10 +1,285 @@
-#!/bin/bash
+#!/usr/bin/env python
 
-CURRENT_USER=`whoami`
-LAB_NUMBER=$1
+# Copyright John Sullivan 2013
 
-cd $2
-mkdir build
-for f in `find . -maxdepth 1 -type f`; do
-        cat ~/bin/header_template.txt $f > ./build/${CURRENT_USER}_lab${LAB_NUMBER}_`basename ${f}`
-done
+import sys
+import os
+import os.path
+import shutil
+
+DEFAULT_HEADER_TEMPLATE = \
+"""/*        [file_name] - [date]
+ *	Name & E-mail: [full_name] <[email]>
+ *	CS Login: [cs_login]
+ *	Partner(s) Name & E-mail: [partner_full_name] <[partner_email]>
+ *	Lab Section: [lab_section]
+ *	Assignment: Lab [lab_number] Exercise [exercise_number]
+ *	
+ *	I acknowledge all content contained herein, excluding template or example
+ *	code, is my own original work.
+ */
+ """
+
+# List of files and/or directories that should be removed when the program
+# exits, regardless of how the program does so.
+cleanup_list = []
+
+def resolve_path(path):
+	"Resolves a user provided path in a sane way."
+
+	return os.path.abspath(os.path.expanduser(path))
+
+def parse_arguments(args = sys.argv[1:]):
+    from optparse import OptionParser, make_option
+    import getpass
+
+    option_list = [
+        make_option(
+            "-u", "--user", dest = "user", type = "string", action = "store",
+            default = getpass.getuser(),
+            help = "Your UCR username (default: %default)."
+        ),
+        make_option(
+        	"-t", "--template", dest = "template", type = "string",
+        	action = "store",
+        	default = "~/.120b_preparer_cache/header_template.cpp",
+        	help = "The file that stores the header template (default: "
+        		   "%default). If the file does not exist the default file "
+                   "template is used."
+        ),
+        make_option(
+        	"--no-cache", dest = "should_cache", action = "store_false",
+        	default = True,
+        	help = "If present, the no mappings file will be loaded, and any "
+        	       "given mappings will not be cached."
+       	),
+       	make_option(
+        	"-v", "--verbose", dest = "verbose", action = "store_true",
+        	default = False,
+        	help = "If present, lots of stuff will be printed."
+       	),
+       	make_option(
+        	"--no-create-cache", dest = "create_cache", action = "store_false",
+        	default = True,
+        	help = "If present, ~/.120b_preparer_cache will not be created."
+       	),
+        make_option(
+        	"-m", "--mappings", dest = "mappings", type = "string",
+        	action = "store",
+        	default = "~/.120b_preparer_cache/mappings.json",
+        	help = "The file that stores the mappings used when filling in the "
+        	       "header template. Should be JSON dictionary. If it does not "
+        	       "exist it will be created. This option is ignored if the "
+        	       "no-cache flag is present (default: %default)."
+        ),
+        make_option(
+        	"-z", "--zip", dest = "build_to", type = "string", action = "store",
+        	default = None,
+        	help = "The file that the zip file will be written to. Defaults to "
+        	       "what the lab turnin requirements say."
+        )
+    ]
+
+    parser = OptionParser(
+        usage = "usage: %prog [options] [LAB_NUMBER] [DIRECTORY]",
+        description = "Tool for preparing lab assignments for submission.",
+        option_list = option_list
+    )
+
+    options, args = parser.parse_args(args)
+
+    if len(args) < 2:
+        parser.error("At least two arguments must be supplied.")
+
+    args[1] = resolve_path(args[1])
+    options.template = resolve_path(options.template)
+    options.mappings = resolve_path(options.mappings)
+
+    return (options, args)
+
+def awesome_template(template_text, mappings):
+	"Very efficient and awesome templating engine. Patent pending."
+
+	for k, v in mappings.items():
+		template_text = template_text.replace("[" + k + "]", v)
+
+	return template_text
+
+import re
+TEMPLATE_VARIABLE_RE = re.compile(r"\[[A-Za-z_]+\]")
+def find_needed_vars(template_text):
+	return [i[1:-1] for i in TEMPLATE_VARIABLE_RE.findall(template_text)]
+
+def load_file(the_file):
+	"Loads an entire file into a string, because it's so much more efficient."
+
+	return the_file.read()
+
+def load_mappings_file(the_file):
+	"Loads mappings file and returns a dict."
+
+	import json
+	try:
+		return json.load(the_file)
+	except ValueError:
+		return {}
+
+def cache_mappings_file(the_file, mappings):
+	"Saves mapping file."
+
+	import json
+	json.dump(mappings, the_file)
+
+def prepend_to_file(file_path, text):
+	with open(file_path) as f:
+		original = load_file(f)
+
+	with open(file_path, "w") as f:
+		f.write(text + original)
+
+def main():
+	options, args = parse_arguments()
+
+	if options.create_cache:
+		try:
+			os.makedirs(resolve_path("~/.120b_preparer_cache/"))
+		except OSError:
+			# Will error if already exists
+			pass
+
+	def v(msg, out = sys.stdout):
+		"Logs if in verbose mode."
+
+		if options.verbose:
+			print >> out, msg
+
+	# This will be prefixed to every file in the submission.
+	prefix = options.user + "_lab" + args[0] + "_"
+
+	# Preload the raw template file.
+	try:
+		template_text = load_file(open(options.template))
+
+		v("Using template file at %s." % options.template)
+	except IOError:
+		v("Could not load template file, using default.")
+
+		template_text = DEFAULT_HEADER_TEMPLATE
+	
+	# The variables the template needs filled in, and the ones that will be
+	# provided within the loop.
+	needed = find_needed_vars(template_text)
+	PROVIDED = ["file_name", "lab_number", "exercise_number", "date"]
+
+	mappings = {}
+	if options.should_cache:
+		try:
+			mappings = load_mappings_file(open(options.mappings))
+		except IOError:
+			# No problem!
+			pass
+
+	# Ensure that the user didn't accidently stick unneccesary or provided
+	# variables in the mapping file.
+	for k in mappings.keys():
+		if k not in needed:
+			v(
+				"Ignoring variable %s found in mapping file but not required "
+				"by the template."
+			)
+		elif k in PROVIDED:
+			v(
+				"Ignoring variable %s found in mapping file but provided by "
+				"the script."
+			)
+
+	# Grab any missing variables
+	print "We need a little bit of data from you..."
+	for k in (i for i in needed if i not in PROVIDED):
+		if k not in mappings:
+			prompt = "\tEnter value for '%s': " % k
+		else:
+			prompt = "\tEnter value for '%s' (leave blank for %s): " % \
+				(k, mappings[k])
+
+		user_value = raw_input(prompt)
+		if user_value or k not in mappings:
+			mappings[k] = user_value
+
+	if options.should_cache:
+		mappings_clone = dict((k, v) for k, v in mappings.items() if v)
+
+		try:
+			cache_mappings_file(open(options.mappings, "w"), mappings_clone)
+		except IOError as e:
+			print >> sys.stderr, "Could not cache values to %s: %s" % \
+				(options.mappings, str(e))
+
+	import datetime
+	mappings["date"] = datetime.datetime.today().strftime("%h %d, %Y")
+	mappings["lab_number"] = args[0]
+
+	# Confirm that all is well
+	print "The header now looks like: "
+	print awesome_template(template_text, mappings)	
+	print
+	print (
+		"(Don't worry, exercise_number and file_name will be filled in for you)"
+	)
+
+	if raw_input("Does this look good (enter yes or no)?: ") != "yes":
+		print "I'm sorry, I'll do better next time!"
+		exit(1)
+
+	# Create a temporary directory we can play with. We make it in the home
+	# directory to prevent problems with students getting access to eachothers
+	# code when running on lab machines or bell.
+	import tempfile
+	temp_dir = tempfile.mkdtemp(dir = resolve_path("~"))
+	cleanup_list.append(temp_dir)
+
+	# Loop through all files and add prefix
+	files = [i for i in os.listdir(args[1]) if
+		os.path.isfile(os.path.join(args[1], i))]
+	new_files = [] # Note that these are absolute paths
+	for file_name in files:
+		# If the file already has the prefix
+		if file_name.startswith(prefix):
+			copy_to = os.path.join(temp_dir, file_name)
+		else:
+			copy_to = os.path.join(temp_dir, prefix + file_name)
+		
+		shutil.copy(os.path.join(args[1], file_name), copy_to)
+		new_files.append(copy_to)
+
+	# Loop through all C files and add header
+	import re
+	NUM_RE = re.compile("[0-9]+")
+	c_files = [i for i in new_files if i.endswith(".c")]
+	for file_path in c_files:
+		mappings_clone = dict(mappings)
+		mappings_clone["file_name"] = os.path.basename(file_path)
+		try:
+			# Grab the last number in the file path
+			mappings_clone["exercise_number"] = NUM_RE.findall(file_name)[-1]
+		except IndexError:
+			print >> sys.stderr, (
+				"Not putting header in C file without exercise number: %s" %
+					file_name
+			)
+			continue	
+
+		prepared_template = awesome_template(template_text, mappings_clone)
+
+		prepend_to_file(file_path, prepared_template)
+
+if __name__ == "__main__":
+	try:
+		exit(main())
+	finally:
+		import shutil
+		for i in cleanup_list:
+			try:
+				shutil.rmtree(i)
+			except:
+				pass
