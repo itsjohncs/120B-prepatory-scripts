@@ -10,7 +10,8 @@ so that you can just submit the result directly.
 ## Using
 
 Once you get the script installed (see the next section) you can simply run
-the command `prepare_files LAB_NUMBER DIRECTORY` to create a zip
+the command `prepare_files LAB_NUMBER DIRECTORY` (ex:
+`prepare_files 2 my_lab_2_files`) to create a zip
 file containing everything you need.
 
 If you run `prepare_files -h` some information on the flags and how to use the
