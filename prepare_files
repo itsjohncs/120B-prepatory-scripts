@@ -1,0 +1,10 @@
+#!/bin/bash
+
+CURRENT_USER=`whoami`
+LAB_NUMBER=$1
+
+cd $2
+mkdir build
+for f in `find . -maxdepth 1 -type f`; do
+        cat ~/bin/header_template.txt $f > ./build/${CURRENT_USER}_lab${LAB_NUMBER}_`basename ${f}`
+done
