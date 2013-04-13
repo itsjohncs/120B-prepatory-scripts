@@ -8,7 +8,7 @@ import os.path
 import shutil
 
 DEFAULT_HEADER_TEMPLATE = \
-"""/*        [file_name] - [date]
+"""/*	[file_name] - [date]
  *	Name & E-mail: [full_name] <[email]>
  *	CS Login: [cs_login]
  *	Partner(s) Name & E-mail: [partner_full_name] <[partner_email]>
@@ -34,11 +34,6 @@ def parse_arguments(args = sys.argv[1:]):
     import getpass
 
     option_list = [
-        make_option(
-            "-u", "--user", dest = "user", type = "string", action = "store",
-            default = getpass.getuser(),
-            help = "Your UCR username (default: %default)."
-        ),
         make_option(
         	"-t", "--template", dest = "template", type = "string",
         	action = "store",
@@ -153,9 +148,6 @@ def main():
 		if options.verbose:
 			print >> out, msg
 
-	# This will be prefixed to every file in the submission.
-	prefix = options.user + "_lab" + args[0] + "_"
-
 	# Preload the raw template file.
 	try:
 		template_text = load_file(open(options.template))
@@ -238,6 +230,9 @@ def main():
 	temp_dir = tempfile.mkdtemp(dir = resolve_path("~"))
 	cleanup_list.append(temp_dir)
 
+	# This will be prefixed to every file in the submission.
+	prefix = mappings["cs_login"] + "_lab" + args[0] + "_"
+
 	# Loop through all files and add prefix
 	files = [i for i in os.listdir(args[1]) if
 		os.path.isfile(os.path.join(args[1], i))]
@@ -272,6 +267,42 @@ def main():
 		prepared_template = awesome_template(template_text, mappings_clone)
 
 		prepend_to_file(file_path, prepared_template)
+
+	import subprocess
+	textual_files = sorted([
+		i for i in new_files if any(i.endswith(j) for j in [".txt", ".h", ".c"])
+	])
+	try:
+		a2ps_job = subprocess.Popen(
+			["a2ps", "-M", "letter", "--line-numbers=1", "-P", "pdf"] +
+				textual_files,
+			cwd = temp_dir
+		)
+		a2ps_job.wait()
+	except OSError:
+		print >> sys.stderr, "You do not have a2ps installed :(, aborting."
+		exit(1)
+
+	# RAWRRR I AM REPTAR!!!!
+
+	all_files = [
+		i for i in os.listdir(temp_dir) if
+			any(i.endswith(j) for j in [".txt", ".h", ".c", ".sm", ".pdf"])
+	]
+	try:
+		tar_job = subprocess.Popen(
+			[
+				"tar", "-czvf", 
+				os.path.join(
+					os.getcwd(), mappings["cs_login"] + "_lab" + args[0] + ".tgz"
+				)
+			] + all_files,
+			cwd = temp_dir
+		)
+		tar_job.wait()
+	except OSError:
+		print >> sys.stderr, "You do not have tar installed :(, aborting."
+		exit(1)
 
 if __name__ == "__main__":
 	try:
