@@ -25,6 +25,16 @@ Likewise if it sees a file named `dbdfskjlsdfa23kjdfj21.c` (don't name your file
 like this -_-) it will assume that the code is the solution for the twenty-first
 exercise because 21 is the last number in that filename.
 
+## Reporting Bugs
+
+If you find any bugs (especially ones that might result in losing points on a
+lab!) please make an issue for it in the issue tracker (which you can find by
+clicking *Issues* near the top of the page, or by clicking
+[here](https://github.com/brownhead/120B-prepatory-scripts/issues)).
+
+Feel free to fix it too and send me the code by opening up a pull request, I
+will be sure you receive proper attribution.
+
 ## Installing
 
 Download a zip file of this repository by clicking
