@@ -23,7 +23,16 @@ that that is the exercise number. For example, if the script sees a file named
 `part1.c` it will assume that the code is the solution for the first exercise.
 Likewise if it sees a file named `dbdfskjlsdfa23kjdfj21.c` (don't name your files
 like this -_-) it will assume that the code is the solution for the twenty-first
-exercise because 21 is the last number in that filename.
+exercise because 21 is the last number in that filename. It will use this
+exercise number when filling in the header template.
+
+The other thing to keep in mind is that it will just concatenate the original
+name of the file with the proper prefix. For example, if your code file is
+named `exercise1.c`, it will be renamed to something like
+`jsull003_lab3_exercise1.c`. Likewise if your code file is named
+`happy_apple_sauce_999.c`, it will be renamed to something like
+`jsull003_lab3_happy_apple_sauce_999.c`. So make sure you name your files
+something appropriate like `part1.c` or `ex3.c`.
 
 ## Reporting Bugs
 
